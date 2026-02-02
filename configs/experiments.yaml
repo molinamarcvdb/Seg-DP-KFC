@@ -1,0 +1,49 @@
+# Experiment configurations for the 4 comparison methods
+# ======================================================
+#
+# Run all 4 methods:
+#   uv run python scripts/run_experiments.py
+#
+# Or run individually:
+#   uv run python scripts/train.py --config configs/default.yaml --method baseline
+#   uv run python scripts/train.py --config configs/default.yaml --method dp_no_precond
+#   uv run python scripts/train.py --config configs/default.yaml --method dp_adadps_public
+#   uv run python scripts/train.py --config configs/default.yaml --method dp_adadps_oracle
+
+# Method 1: Baseline (No DP) - Upper bound on utility
+baseline:
+  dp:
+    enabled: false
+  preconditioning:
+    type: "none"
+  experiment:
+    name: "baseline_no_dp"
+
+# Method 2: DP-SGD without preconditioning
+dp_no_precond:
+  dp:
+    enabled: true
+  preconditioning:
+    type: "none"
+  experiment:
+    name: "dp_no_precond"
+
+# Method 3: DP-SGD + AdaDPS (Public) - Main method
+# Preconditioner E[g²] estimated from public DRIVE data
+dp_adadps_public:
+  dp:
+    enabled: true
+  preconditioning:
+    type: "adadps_public"
+  experiment:
+    name: "dp_adadps_public"
+
+# Method 4: DP-SGD + AdaDPS (Oracle) - Upper bound for preconditioning
+# Preconditioner estimated from private data (NOT privacy-preserving!)
+dp_adadps_oracle:
+  dp:
+    enabled: true
+  preconditioning:
+    type: "adadps_oracle"
+  experiment:
+    name: "dp_adadps_oracle"

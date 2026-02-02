@@ -1,0 +1,85 @@
+# Default configuration for DP Segmentation with AdaDPS
+# ======================================================
+#
+# Single-phase training: Train on private dataset with DP-SGD.
+# Preconditioning can be estimated from public auxiliary data (AdaDPS).
+#
+# Comparison methods:
+#   1. baseline      - No DP (upper bound on utility)
+#   2. dp_no_precond - DP-SGD without preconditioning
+#   3. dp_adadps_public - DP-SGD + AdaDPS from public data
+#   4. dp_adadps_oracle - DP-SGD + AdaDPS from private data (oracle upper bound)
+
+experiment:
+  name: "dp_segmentation"
+  seed: 42
+  device: "cuda"
+
+# Data settings
+data:
+  # Private dataset - what we train on with DP
+  # Merged: DRIVE (40) + STARE (20) + HRF (45) = 105 labeled images
+  private:
+    - name: "DRIVE"
+      path: "../data/processed/DRIVE"
+    - name: "STARE"
+      path: "../data/processed/STARE"
+    - name: "HRF"
+      path: "../data/processed/HRF"
+
+  # Public dataset - ONLY used for preconditioner estimation (not training)
+  # Using DRIVE (40 images) as public auxiliary data for AdaDPS
+  public:
+    name: "DRIVE"
+    path: "../data/processed/DRIVE"
+    split: "training"
+
+  image_size: 256
+  batch_size: 2
+  num_workers: 0  # Set to 0 to avoid shared memory issues on clusters
+  validation_fold: 0
+  n_folds: 5
+
+# Model settings
+model:
+  name: "unet"
+  in_channels: 3
+  out_channels: 1
+  features: [32, 64, 128, 256]
+
+# Training settings
+training:
+  epochs: 50
+  learning_rate: 0.001
+  optimizer: "adam"
+  weight_decay: 0 #.0001
+  scheduler: "cosine"
+
+# Differential Privacy settings
+dp:
+  enabled: true
+  epsilon: 2.0
+  delta: 0.00001
+  max_grad_norm: 1.0
+
+# Preconditioning settings
+# Options:
+#   - "none": No preconditioning (baseline DP-SGD)
+#   - "adadps_public": Estimate E[g²] from public data (DRIVE)
+#   - "adadps_oracle": Estimate E[g²] from private data (upper bound, not private!)
+preconditioning:
+  type: "adadps_public"
+  estimation_steps: 50
+  damping: 0.0001
+
+# Loss settings
+loss:
+  name: "dice_bce"
+  dice_weight: 0.5
+  bce_weight: 0.5
+
+# Logging
+logging:
+  log_every: 10
+  save_every: 10
+  output_dir: "./outputs"
