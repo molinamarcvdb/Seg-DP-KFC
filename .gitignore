@@ -10,10 +10,16 @@ wheels/
 .venv
 
 # Data files (large datasets)
-data/
+/data/
 
-# Output files (model checkpoints, logs)
+# Output files (model checkpoints, results)
 outputs/
+
+# Logs (experiment logs, can be very large)
+logs/
+
+# Generated figures (can be regenerated)
+figures/
 
 # Large model files
 *.pt
@@ -30,6 +36,14 @@ outputs/
 *.parquet
 *.pkl
 *.pickle
+*.tar
+*.tar.gz
+*.zip
+
+# Medical imaging formats
+*.nii
+*.nii.gz
+*.dcm
 
 # Jupyter notebooks checkpoints
 .ipynb_checkpoints/

@@ -27,14 +27,15 @@ class DiceLoss(nn.Module):
     def forward(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         pred = torch.sigmoid(pred)
 
-        # Flatten
-        pred_flat = pred.view(pred.size(0), -1)
-        target_flat = target.view(target.size(0), -1)
+        # Per-channel Dice: (B, C, ...) → (B, C, -1)
+        B, C = pred.shape[0], pred.shape[1]
+        pred_flat = pred.reshape(B, C, -1)
+        target_flat = target.reshape(B, C, -1)
 
-        intersection = (pred_flat * target_flat).sum(dim=1)
-        union = pred_flat.sum(dim=1) + target_flat.sum(dim=1)
+        intersection = (pred_flat * target_flat).sum(dim=2)  # (B, C)
+        union = pred_flat.sum(dim=2) + target_flat.sum(dim=2)  # (B, C)
 
-        dice = (2.0 * intersection + self.smooth) / (union + self.smooth)
+        dice = (2.0 * intersection + self.smooth) / (union + self.smooth)  # (B, C)
         return 1.0 - dice.mean()
 
 

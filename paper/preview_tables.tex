@@ -1,0 +1,35 @@
+\documentclass[runningheads]{llncs}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{xcolor}
+
+\begin{document}
+
+\title{Tables Preview --- DP-Shampoo MICCAI 2026}
+\maketitle
+
+\input{tables}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{epsilon_sweep.pdf}
+\caption{Privacy--utility tradeoff across $\varepsilon \in \{1,2,4,8\}$.
+  DP-Shampoo with synthetic data (red) consistently matches or outperforms
+  vanilla DP-SGD (gray) and is competitive with the oracle upper bound (blue).
+  Green band: non-private baseline $\pm$ 1 std.}
+\label{fig:eps_sweep}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.65\textwidth]{improvement_bars.pdf}
+\caption{Dice improvement (percentage points) over DP-SGD at $\varepsilon{=}8.0$.
+  Shampoo is the only preconditioner that consistently improves across both datasets.
+  AdaDPS with oracle data hurts on Pet ($-3.6$\,pp), while Shampoo with synthetic data
+  achieves $+5.6$\,pp and $+1.7$\,pp on Kvasir and Pet respectively.}
+\label{fig:improvement}
+\end{figure}
+
+\end{document}

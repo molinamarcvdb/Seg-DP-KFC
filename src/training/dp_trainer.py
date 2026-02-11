@@ -282,15 +282,21 @@ class DPTrainer:
         fov: Optional[torch.Tensor] = None,
         smooth: float = 1e-6,
     ) -> torch.Tensor:
-        """Compute Dice score, optionally masked by FOV."""
+        """Compute Dice score, optionally masked by FOV. Per-channel for multi-label."""
         if fov is not None:
             pred = pred * fov
             target = target * fov
 
-        intersection = (pred * target).sum()
-        union = pred.sum() + target.sum()
+        # Per-channel Dice: (B, C, ...) → average over channels
+        B, C = pred.shape[0], pred.shape[1]
+        pred_flat = pred.reshape(B, C, -1)
+        target_flat = target.reshape(B, C, -1)
 
-        return (2.0 * intersection + smooth) / (union + smooth)
+        intersection = (pred_flat * target_flat).sum(dim=(0, 2))  # (C,)
+        union = pred_flat.sum(dim=(0, 2)) + target_flat.sum(dim=(0, 2))  # (C,)
+
+        dice_per_channel = (2.0 * intersection + smooth) / (union + smooth)
+        return dice_per_channel.mean()
 
     def fit(
         self,
@@ -458,12 +464,20 @@ class NonDPTrainer:
         }
 
     def _dice_score(self, pred, target, fov=None, smooth=1e-6):
+        """Compute Dice score, optionally masked by FOV. Per-channel for multi-label."""
         if fov is not None:
             pred = pred * fov
             target = target * fov
-        intersection = (pred * target).sum()
-        union = pred.sum() + target.sum()
-        return (2.0 * intersection + smooth) / (union + smooth)
+
+        B, C = pred.shape[0], pred.shape[1]
+        pred_flat = pred.reshape(B, C, -1)
+        target_flat = target.reshape(B, C, -1)
+
+        intersection = (pred_flat * target_flat).sum(dim=(0, 2))
+        union = pred_flat.sum(dim=(0, 2)) + target_flat.sum(dim=(0, 2))
+
+        dice_per_channel = (2.0 * intersection + smooth) / (union + smooth)
+        return dice_per_channel.mean()
 
     def fit(self, log_fn=None, save_fn=None):
         history = {"train_loss": [], "val_loss": [], "val_dice": []}

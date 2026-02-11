@@ -20,6 +20,10 @@ dependencies = [
     "medmnist>=3.0.0", # MedMNIST datasets
     "noise>=1.2.2", # Perlin noise generation
     "scipy>=1.11.0", # Scientific computing
+    "timm>=1.0.0", # Vision models (needed for RADIO backbone)
+    "einops>=0.7.0", # Tensor reshaping (RADIO dependency)
+    "nibabel>=5.3.3",
+    "plotly>=6.5.2",
 ]
 
 [project.optional-dependencies]

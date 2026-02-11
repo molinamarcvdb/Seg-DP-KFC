@@ -1,4 +1,4 @@
-from .preconditioner import AdaDPSPreconditioner, create_preconditioner
+from .preconditioner import AdaDPSPreconditioner, MomentumPreconditioner, KFACPreconditioner, ShampooPreconditioner, create_preconditioner
 from .dp_trainer import (
     DPTrainer,
     NonDPTrainer,
@@ -10,6 +10,9 @@ from .losses import create_loss, DiceLoss, DiceBCELoss
 __all__ = [
     # Preconditioner
     "AdaDPSPreconditioner",
+    "MomentumPreconditioner",
+    "KFACPreconditioner",
+    "ShampooPreconditioner",
     "create_preconditioner",
     # Segmentation trainers
     "DPTrainer",
