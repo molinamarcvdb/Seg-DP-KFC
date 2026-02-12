@@ -1,0 +1,9 @@
+MY.SendCredential = True
+
+request_gpus = 1
+requirements = regexp("A100", TARGET.GPUs_DeviceName)
+request_cpus = 2
+request_memory = 40GB
++JobFlavour = "espresso"
+
+queue

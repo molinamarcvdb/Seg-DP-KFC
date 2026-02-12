@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Training script for Fundus Optic Disc Segmentation experiments.
+Training script for Retinal Vessel Segmentation experiments.
 
 Supports:
 - Baseline (no DP)
@@ -28,7 +28,7 @@ import torch
 from torch.utils.data import DataLoader
 from opacus import GradSampleModule
 
-from src.data.fundus_dataset import FundusSegDataset
+from src.data.retinal_vessel_dataset import RetinalVesselDataset
 from src.models import create_model
 from src.training import (
     DPTrainer,
@@ -40,7 +40,7 @@ from src.training import (
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Train on Fundus Optic Disc/Cup")
+    parser = argparse.ArgumentParser(description="Train on Retinal Vessel Segmentation")
 
     # Method
     parser.add_argument("--method", type=str, default="baseline",
@@ -75,8 +75,7 @@ def parse_args():
     parser.add_argument("--image_size", type=int, default=128)
 
     # Data
-    parser.add_argument("--data_root", type=str, default="./data/fundus")
-    parser.add_argument("--target", type=str, default="disc", choices=["disc", "cup"])
+    parser.add_argument("--data_root", type=str, default="./data/archive-2")
 
     # Output
     parser.add_argument("--output_dir", type=str, default="./outputs")
@@ -110,14 +109,14 @@ def main():
     print(f"Output directory: {output_dir}")
 
     # Data
-    print("\nLoading Fundus datasets...")
-    train_dataset = FundusSegDataset(
+    print("\nLoading Retinal Vessel dataset...")
+    train_dataset = RetinalVesselDataset(
         root=args.data_root, split="train", image_size=args.image_size,
-        target=args.target, augment=True, seed=args.seed,
+        augment=True, seed=args.seed,
     )
-    val_dataset = FundusSegDataset(
+    val_dataset = RetinalVesselDataset(
         root=args.data_root, split="val", image_size=args.image_size,
-        target=args.target, augment=False, seed=args.seed,
+        augment=False, seed=args.seed,
     )
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
@@ -234,7 +233,7 @@ def main():
     # Results
     results = {
         "dataset": "fundus",
-        "target": args.target,
+        "target": "vessel",
         "method": args.method,
         "epsilon": args.epsilon if args.method != "baseline" else None,
         "lr": args.lr,

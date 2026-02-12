@@ -45,6 +45,17 @@ figures/
 *.nii.gz
 *.dcm
 
+# Paper sub-repo (has its own git)
+paper/dp_shampoo_repo/
+
+# Condor runtime artifacts
+condor/log/
+condor/output/
+condor/error/
+
+# Exported requirements (regenerable)
+requirements.txt
+
 # Jupyter notebooks checkpoints
 .ipynb_checkpoints/
 

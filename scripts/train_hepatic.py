@@ -206,7 +206,7 @@ def parse_args():
     parser.add_argument("--precond_samples", type=int, default=1000)
     parser.add_argument("--noise_type", type=str, default="pink",
                         choices=["white", "pink", "brown", "perlin"])
-    parser.add_argument("--mask_strategy", type=str, default="vessel_tumor_combo",
+    parser.add_argument("--mask_strategy", type=str, default="frangi",
                         choices=["gaussian_blobs", "random_shapes", "pink_threshold",
                                  "voronoi", "frangi", "vessel_tumor_combo"])
 
@@ -218,7 +218,7 @@ def parse_args():
     parser.add_argument("--patch_size", type=int, default=64)
     parser.add_argument("--estimation_patch_size", type=int, default=64)
     parser.add_argument("--patches_per_volume", type=int, default=8)
-    parser.add_argument("--target", type=str, default="multilabel",
+    parser.add_argument("--target", type=str, default="all",
                         choices=["multilabel", "vessel", "tumour", "all"])
 
     # Performance
@@ -280,7 +280,7 @@ def main():
 
     # Model (1 input channel for CT)
     out_channels = 2 if args.target == "multilabel" else 1
-    channel_names = ["vessel", "tumour"] if args.target == "multilabel" else [args.target]
+    channel_names = ["vessel", "tumour"] if args.target == "multilabel" else ["foreground"]
     model = create_model_3d("unet3d", in_channels=1, out_channels=out_channels, features=args.features)
     n_params = sum(p.numel() for p in model.parameters())
     print(f"  Model params: {n_params:,}")
