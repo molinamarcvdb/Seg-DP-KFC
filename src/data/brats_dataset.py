@@ -1,18 +1,22 @@
 """
 BraTS 2025 Dataset for 3D brain tumor segmentation.
 
-Loads NIfTI volumes, extracts random 3D patches, with per-modality z-score
-normalization. Supports whole tumor (WT), tumor core (TC), and enhancing
-tumor (ET) targets.
+Loads NIfTI volumes (or preprocessed .npz files), extracts random 3D patches,
+with per-modality z-score normalization. Supports whole tumor (WT), tumor core
+(TC), and enhancing tumor (ET) targets.
 
 Data path: /eos/project/d/diagbox/BRATS2025/.../BraTS2025-GLI-PRE-Challenge-TrainingData/
+Preprocessed: /eos/project/d/diagbox/BRATS2025/preprocessed_npz/
 Volumes: (182, 218, 182), 4 MRI modalities (T1c, T1n, T2f, T2w), isotropic 1mm.
 Seg labels: 0=bg, 1=NCR, 2=ED, 3=ET.
+
+To preprocess (10-20x faster loading):
+    python scripts/preprocess_brats.py
 """
 
 import os
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 import nibabel as nib
 import numpy as np
@@ -21,20 +25,30 @@ from torch.utils.data import Dataset, DataLoader
 
 
 BRATS_DEFAULT_ROOT = "/eos/project/d/diagbox/BRATS2025/Glioma_seg_pre_post_treatment_mri/PRE/BraTS2025-GLI-PRE-Challenge-TrainingData/BraTS2025-GLI-PRE-Challenge-TrainingData"
+BRATS_PREPROCESSED_ROOT = "/eos/project/d/diagbox/BRATS2025/preprocessed_npz"
 
 MODALITIES = ["t1c", "t1n", "t2f", "t2w"]
 
 
-def _discover_cases(root: str):
+def _discover_cases(root: str) -> List[Path]:
     """Discover all BraTS case directories sorted by name."""
     root = Path(root)
     cases = sorted([d for d in root.iterdir() if d.is_dir()])
     return cases
 
 
+def _discover_npz_cases(root: str) -> List[Path]:
+    """Discover all preprocessed .npz files sorted by name."""
+    root = Path(root)
+    if not root.exists():
+        return []
+    cases = sorted(root.glob("*.npz"))
+    return cases
+
+
 def _load_volume(case_path):
     """
-    Load and normalize a BraTS volume.
+    Load and normalize a BraTS volume from NIfTI files.
 
     Returns:
         image: np.ndarray of shape (4, D, H, W), float32, z-score normalized
@@ -67,6 +81,20 @@ def _load_volume(case_path):
     return image, seg
 
 
+def _load_volume_npz(npz_path: Path):
+    """
+    Load a preprocessed BraTS volume from .npz file (10-20x faster).
+
+    Returns:
+        image: np.ndarray of shape (4, D, H, W), float32
+        seg: np.ndarray of shape (D, H, W), int labels
+    """
+    data = np.load(npz_path)
+    image = data["image"].astype(np.float32)  # Stored as float16
+    seg = data["seg"].astype(np.int64)
+    return image, seg
+
+
 def _binarize_target(seg: np.ndarray, target: str) -> np.ndarray:
     """Convert segmentation labels to the specified target.
 
@@ -95,6 +123,9 @@ class BraTSPatchDataset(Dataset):
     Extracts random 3D patches from volumes. 50% tumor-centered,
     50% random foreground. Includes random flips and intensity scaling.
 
+    Supports both NIfTI files (slow) and preprocessed .npz files (10-20x faster).
+    Use `use_preprocessed=True` to load from .npz files.
+
     Uses a per-instance dict cache that is shared across workers via
     fork (copy-on-write) when prefilled, or populated per-worker otherwise.
     """
@@ -109,6 +140,8 @@ class BraTSPatchDataset(Dataset):
         augment: bool = True,
         seed: int = 42,
         cache_volumes: int = 8,
+        use_preprocessed: bool = True,
+        preprocessed_root: str = BRATS_PREPROCESSED_ROOT,
     ):
         self.root = Path(root)
         self.patch_size = patch_size
@@ -116,9 +149,21 @@ class BraTSPatchDataset(Dataset):
         self.target = target
         self.augment = augment and (split == "train")
         self._cache_max = cache_volumes
+        
+        # Check for preprocessed .npz files (10-20x faster)
+        npz_cases = _discover_npz_cases(preprocessed_root) if use_preprocessed else []
+        self.use_npz = len(npz_cases) > 0
+        
+        if self.use_npz:
+            print(f"Using preprocessed .npz files from {preprocessed_root} (10-20x faster)")
+            all_cases = npz_cases
+        else:
+            if use_preprocessed:
+                print(f"Preprocessed files not found at {preprocessed_root}, falling back to NIfTI")
+                print("Run: python scripts/preprocess_brats.py  for 10-20x faster loading")
+            all_cases = _discover_cases(root)
 
-        # Discover and split cases (85/15)
-        all_cases = _discover_cases(root)
+        # Split cases (85/15)
         rng = np.random.RandomState(seed)
         indices = rng.permutation(len(all_cases))
         split_idx = int(0.85 * len(all_cases))
@@ -139,7 +184,12 @@ class BraTSPatchDataset(Dataset):
         if key in self._cache:
             return self._cache[key]
 
-        image, seg = _load_volume(case_path)
+        # Load from npz (fast) or NIfTI (slow)
+        if self.use_npz:
+            image, seg = _load_volume_npz(case_path)
+        else:
+            image, seg = _load_volume(case_path)
+        
         mask = _binarize_target(seg, self.target)
         tumor_voxels = np.argwhere(mask > 0)
 
@@ -243,7 +293,10 @@ class BraTSPatchDataset(Dataset):
     def get_full_volume(self, case_idx: int):
         """Load a full volume for sliding window inference."""
         case_path = self.cases[case_idx]
-        image, seg = _load_volume(case_path)
+        if self.use_npz:
+            image, seg = _load_volume_npz(case_path)
+        else:
+            image, seg = _load_volume(case_path)
         mask = _binarize_target(seg, self.target)
         mask_t = torch.from_numpy(mask.copy()).float()
         if mask_t.ndim == 3:

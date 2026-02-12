@@ -20,6 +20,12 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import torch.multiprocessing as mp
+try:
+    mp.set_start_method('spawn', force=True)
+except RuntimeError:
+    pass  # Already set
+
 import argparse
 import json
 from datetime import datetime
@@ -111,14 +117,46 @@ def evaluate_full_volumes(model, dataset, patch_size, device, out_channels=1,
     if channel_names is None:
         channel_names = [f"ch{i}" for i in range(out_channels)]
 
-    all_dices = {name: [] for name in channel_names}
-
+    # Collect predictions and masks for threshold search
+    all_preds = []
+    all_masks = []
+    
+    print(f"  Running inference on {n_cases} volumes...")
     for i in range(n_cases):
         volume, mask = dataset.get_full_volume(i)
         pred = sliding_window_inference(model, volume, patch_size, device,
                                         out_channels=out_channels)
-        pred_binary = (pred > 0.5).float()
-
+        all_preds.append(pred)
+        all_masks.append(mask)
+    
+    # Search for optimal threshold
+    best_thresh = 0.5
+    best_mean_dice = 0.0
+    
+    print("  Searching for optimal threshold...")
+    for thresh in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]:
+        thresh_dices = {name: [] for name in channel_names}
+        for pred, mask in zip(all_preds, all_masks):
+            pred_binary = (pred > thresh).float()
+            for c, name in enumerate(channel_names):
+                p = pred_binary[c]
+                m = mask[c]
+                intersection = (p * m).sum()
+                union = p.sum() + m.sum()
+                dice = (2.0 * intersection + 1e-6) / (union + 1e-6)
+                thresh_dices[name].append(dice.item())
+        
+        mean_dice = np.mean([np.mean(thresh_dices[n]) for n in channel_names])
+        if mean_dice > best_mean_dice:
+            best_mean_dice = mean_dice
+            best_thresh = thresh
+    
+    print(f"  Best threshold: {best_thresh}")
+    
+    # Compute final results with best threshold
+    all_dices = {name: [] for name in channel_names}
+    for i, (pred, mask) in enumerate(zip(all_preds, all_masks)):
+        pred_binary = (pred > best_thresh).float()
         vol_dices = []
         for c, name in enumerate(channel_names):
             p = pred_binary[c]
@@ -133,7 +171,7 @@ def evaluate_full_volumes(model, dataset, patch_size, device, out_channels=1,
         detail = ", ".join(f"{n}={d:.4f}" for n, d in zip(channel_names, vol_dices))
         print(f"  Volume {i+1}/{n_cases}: Dice={mean_vol:.4f} ({detail})")
 
-    results = {}
+    results = {"best_threshold": best_thresh}
     for name in channel_names:
         results[f"dice_{name}"] = np.mean(all_dices[name])
     results["mean_dice"] = np.mean([results[f"dice_{n}"] for n in channel_names])

@@ -11,7 +11,7 @@
 # Usage: nohup bash scripts/run_brats_standalone.sh > logs/brats_standalone.log 2>&1 &
 
 set -e
-cd /home/mmolinav/Projects/SEG_DP_KFC
+cd /home/mmolinav/Projects/Seg-DP-KFC/
 mkdir -p logs
 
 echo "============================================"
