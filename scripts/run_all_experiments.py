@@ -121,8 +121,8 @@ DATASET_CONFIGS = {
                   "extra_args": []},
     "brats":     {"epochs": 10, "tune_epochs": 3, "batch_size": 8,   "script": "train_brats.py",
                   "extra_args": ["--num_workers", "4", "--patch_size", "64"]},
-    "hepatic":   {"epochs": 10, "tune_epochs": 3, "batch_size": 16,  "script": "train_hepatic.py",
-                  "extra_args": ["--num_workers", "4", "--patch_size", "64"]},
+    "hepatic":   {"epochs": 200, "tune_epochs": 10, "batch_size": 4,  "script": "train_hepatic.py",
+                  "extra_args": ["--num_workers", "4", "--patch_size", "128"]},
 }
 
 

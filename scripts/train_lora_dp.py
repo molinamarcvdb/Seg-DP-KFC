@@ -181,6 +181,49 @@ def validate(model, val_loader, loss_fn, device):
 # Preconditioner estimation
 # ---------------------------------------------------------------------------
 
+def refresh_preconditioner_from_synthetic(
+    preconditioner, model, loss_fn, device, image_size,
+    precond_samples=1000, batch_size=8,
+):
+    """Re-estimate preconditioner from synthetic data using current model weights.
+
+    Unlike initial estimation, this does NOT touch LoRA init — it uses the
+    model as-is, capturing the gradient geometry at the current training state.
+    Works with GradSampleModule-wrapped models by operating on the inner module.
+
+    For Shampoo: uses param.grad (batch-averaged) on the unwrapped base model.
+    For AdaDPS: uses the existing GSM-wrapped model (already has hooks for
+    per-sample gradients, so no need to re-wrap).
+    """
+    from src.data.synthetic import SyntheticSegmentationDataset
+
+    # AdaDPS needs per-sample gradients → use the existing GSM wrapper.
+    # Shampoo needs param.grad → use the unwrapped base model.
+    needs_gsm = isinstance(preconditioner, AdaDPSPreconditioner)
+    is_gsm = hasattr(model, '_module')
+
+    if needs_gsm:
+        # Use the existing GSM-wrapped model directly (already has hooks)
+        est_model = model
+    else:
+        # Shampoo: use unwrapped model for batch-averaged param.grad
+        est_model = model._module if is_gsm else model
+
+    synth_ds = SyntheticSegmentationDataset(
+        n_samples=precond_samples, image_size=image_size,
+        in_channels=3, noise_type="pink", mask_strategy="gaussian_blobs",
+    )
+    synth_loader = DataLoader(synth_ds, batch_size=batch_size, shuffle=True, num_workers=0)
+    num_steps = min(len(synth_loader), precond_samples // batch_size)
+
+    preconditioner.estimate_from_loader(
+        model=est_model, data_loader=synth_loader, loss_fn=loss_fn,
+        num_steps=num_steps, task="segmentation",
+    )
+
+    print(f"  Preconditioner refreshed from synthetic data ({num_steps} steps)")
+
+
 def estimate_preconditioner(
     preconditioner, method, model, loss_fn,
     train_loader, device, image_size, precond_samples=1000, batch_size=8,
@@ -238,8 +281,9 @@ def estimate_preconditioner(
             num_steps=num_steps, task="segmentation",
         )
 
-    # Unwrap GradSampleModule if we wrapped it for estimation
+    # Properly remove GSM hooks so the model can be re-wrapped for training
     if needs_gsm:
+        model_for_est.remove_hooks()
         del model_for_est
 
 
@@ -260,9 +304,17 @@ def main():
     parser.add_argument("--lora_rank", type=int, default=4)
     parser.add_argument("--lora_alpha", type=float, default=8.0)
     parser.add_argument("--num_lora_layers", type=int, default=4)
+    parser.add_argument("--optimizer", type=str, default="adamw",
+                        choices=["adamw", "sgd"],
+                        help="Optimizer: adamw (default) or sgd (avoids double-preconditioning)")
+    parser.add_argument("--momentum", type=float, default=0.9,
+                        help="SGD momentum (only used with --optimizer sgd)")
     parser.add_argument("--shampoo_damping", type=float, default=1e-4)
     parser.add_argument("--adadps_damping", type=float, default=0.1)
     parser.add_argument("--precond_samples", type=int, default=1000)
+    parser.add_argument("--refresh_precond", type=int, default=0,
+                        help="Re-estimate preconditioner every N epochs from synthetic data (0=disabled). "
+                             "Free privacy-wise since it uses synthetic data only.")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--data_root", type=str, default="./data/kvasir_seg")
@@ -285,7 +337,7 @@ def main():
     print(f"\n{'='*60}")
     print(f"DP-LoRA Finetuning: {method}")
     print(f"  epsilon={args.epsilon}, lr={args.lr}, rank={args.lora_rank}")
-    print(f"  ffa_mode={is_ffa}, dp={is_dp}")
+    print(f"  optimizer={args.optimizer}, ffa_mode={is_ffa}, dp={is_dp}")
     print(f"{'='*60}")
 
     # --- Data ---
@@ -339,7 +391,11 @@ def main():
 
     # --- Optimizer (only trainable params) ---
     trainable_params = list(model.get_trainable_params())
-    optimizer = torch.optim.AdamW(trainable_params, lr=args.lr, weight_decay=1e-4)
+    if args.optimizer == "sgd":
+        optimizer = torch.optim.SGD(trainable_params, lr=args.lr,
+                                    momentum=args.momentum, weight_decay=1e-4)
+    else:
+        optimizer = torch.optim.AdamW(trainable_params, lr=args.lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs)
 
     # --- DP setup ---
@@ -372,6 +428,14 @@ def main():
 
     for epoch in range(args.epochs):
         print(f"\nEpoch {epoch + 1}/{args.epochs}")
+
+        # Refresh preconditioner periodically (uses synthetic data, free privacy)
+        if (preconditioner is not None and args.refresh_precond > 0
+                and epoch > 0 and epoch % args.refresh_precond == 0):
+            refresh_preconditioner_from_synthetic(
+                preconditioner, model, loss_fn, args.device, args.image_size,
+                precond_samples=args.precond_samples, batch_size=args.batch_size,
+            )
 
         if is_dp:
             train_loss = train_epoch_dp(
@@ -410,12 +474,14 @@ def main():
     results = {
         "dataset": "kvasir",
         "method": method,
+        "optimizer": args.optimizer,
         "lr": args.lr,
         "epochs": args.epochs,
         "epsilon": args.epsilon if is_dp else None,
         "seed": args.seed,
         "lora_rank": args.lora_rank,
         "ffa_mode": is_ffa,
+        "refresh_precond": args.refresh_precond,
         "best_val_dice": best_dice,
         "final_val_dice": history["val_dice"][-1],
         "elapsed_seconds": elapsed,

@@ -195,7 +195,7 @@ def parse_args():
     parser.add_argument("--max_grad_norm", type=float, default=1.0)
 
     # Training
-    parser.add_argument("--epochs", type=int, default=10)
+    parser.add_argument("--epochs", type=int, default=200)
     parser.add_argument("--batch_size", type=int, default=2)
     parser.add_argument("--lr", type=float, default=0.001)
     parser.add_argument("--optimizer", type=str, default="sgd", choices=["adam", "sgd"])
@@ -215,9 +215,9 @@ def parse_args():
 
     # Data
     parser.add_argument("--data_root", type=str, default=HEPATIC_DEFAULT_ROOT)
-    parser.add_argument("--patch_size", type=int, default=64)
-    parser.add_argument("--estimation_patch_size", type=int, default=64)
-    parser.add_argument("--patches_per_volume", type=int, default=8)
+    parser.add_argument("--patch_size", type=int, default=128)
+    parser.add_argument("--estimation_patch_size", type=int, default=128)
+    parser.add_argument("--patches_per_volume", type=int, default=16)
     parser.add_argument("--target", type=str, default="all",
                         choices=["multilabel", "vessel", "tumour", "all"])
 
@@ -386,11 +386,55 @@ def main():
                            args.epochs, args.device, preconditioner=precond,
                            scheduler=scheduler)
 
-    history = trainer.fit()
+    # Train with periodic checkpointing
+    checkpoint_every = 10  # Save checkpoint every N epochs
+    best_val_dice = 0.0
+    history = {"train_loss": [], "val_loss": [], "val_dice": []}
 
-    # Save history
-    with open(output_dir / "history.json", "w") as f:
-        json.dump(history, f, indent=2)
+    for epoch in range(1, args.epochs + 1):
+        train_metrics = trainer.train_epoch()
+        val_metrics = trainer.validate()
+        if scheduler is not None:
+            scheduler.step()
+
+        train_loss = train_metrics["train_loss"]
+        val_loss = val_metrics["val_loss"]
+        val_dice = val_metrics["val_dice"]
+
+        print(f"Epoch {epoch}/{args.epochs}")
+        print(f"  Train Loss: {train_loss:.4f}")
+        print(f"  Val Loss: {val_loss:.4f}, Val Dice: {val_dice:.4f}")
+
+        history["train_loss"].append(train_loss)
+        history["val_loss"].append(val_loss)
+        history["val_dice"].append(val_dice)
+
+        if val_dice > best_val_dice:
+            best_val_dice = val_dice
+
+        # Periodic checkpoint
+        if epoch % checkpoint_every == 0 or epoch == args.epochs:
+            interim_results = {
+                "dataset": "hepatic",
+                "target": args.target,
+                "method": args.method,
+                "epsilon": args.epsilon if args.method != "baseline" else None,
+                "lr": args.lr,
+                "epochs_completed": epoch,
+                "epochs_total": args.epochs,
+                "seed": args.seed,
+                "patch_size": args.patch_size,
+                "best_val_dice": best_val_dice,
+                "current_val_dice": val_dice,
+                "current_train_loss": train_loss,
+                "current_val_loss": val_loss,
+                "status": "running" if epoch < args.epochs else "completed",
+            }
+            with open(output_dir / "results.json", "w") as f:
+                json.dump(interim_results, f, indent=2)
+            with open(output_dir / "history.json", "w") as f:
+                json.dump(history, f, indent=2)
+            print(f"  Checkpoint saved (epoch {epoch})", flush=True)
 
     # Patch-based results
     results = {
@@ -402,7 +446,7 @@ def main():
         "epochs": args.epochs,
         "seed": args.seed,
         "patch_size": args.patch_size,
-        "best_val_dice": max(history["val_dice"]),
+        "best_val_dice": best_val_dice,
         "final_val_dice": history["val_dice"][-1],
         "final_train_loss": history["train_loss"][-1],
         "final_val_loss": history["val_loss"][-1],
@@ -423,6 +467,7 @@ def main():
     results["full_volume_dice_per_channel"] = {
         k: v for k, v in vol_results.items() if k != "mean_dice"
     }
+    results["status"] = "completed"
 
     print(f"\nResults:")
     print(f"  Best Val Dice (patches): {results['best_val_dice']:.4f}")
