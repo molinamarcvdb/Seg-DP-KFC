@@ -266,11 +266,36 @@ def evaluate_full_volumes(model, dataset, patch_size, device, n_volumes=None):
 # Preconditioner estimation
 # ---------------------------------------------------------------------------
 
-def estimate_preconditioner(preconditioner, model, loss_fn, device,
-                            patch_size, precond_samples=1000, batch_size=4):
-    """Estimate preconditioner from 3D synthetic data."""
-    from src.data.synthetic import SyntheticSegmentationDataset
+class Synthetic3DDataset(torch.utils.data.Dataset):
+    """Simple 3D synthetic dataset for preconditioner estimation."""
 
+    def __init__(self, n_samples=500, patch_size=96):
+        self.n_samples = n_samples
+        self.patch_size = patch_size
+
+    def __len__(self):
+        return self.n_samples
+
+    def __getitem__(self, idx):
+        ps = self.patch_size
+        rng = np.random.RandomState(idx)
+        # Random noise volume
+        image = rng.randn(1, ps, ps, ps).astype(np.float32)
+        # Random blob mask
+        mask = np.zeros((1, ps, ps, ps), dtype=np.float32)
+        n_blobs = rng.randint(2, 6)
+        for _ in range(n_blobs):
+            c = rng.randint(ps // 4, 3 * ps // 4, size=3)
+            r = rng.randint(3, ps // 6)
+            z, y, x = np.ogrid[-c[0]:ps-c[0], -c[1]:ps-c[1], -c[2]:ps-c[2]]
+            sphere = (z*z + y*y + x*x) <= r*r
+            mask[0][sphere] = 1.0
+        return torch.from_numpy(image), torch.from_numpy(mask)
+
+
+def estimate_preconditioner(preconditioner, model, loss_fn, device,
+                            patch_size, precond_samples=500, batch_size=2):
+    """Estimate preconditioner from 3D synthetic data."""
     print("\nEstimating preconditioner from synthetic 3D data...")
 
     needs_gsm = isinstance(preconditioner, AdaDPSPreconditioner)
@@ -279,14 +304,7 @@ def estimate_preconditioner(preconditioner, model, loss_fn, device,
     else:
         est_model = model
 
-    synth_ds = SyntheticSegmentationDataset(
-        n_samples=precond_samples,
-        image_size=patch_size,
-        in_channels=1,
-        noise_type="pink",
-        mask_strategy="gaussian_blobs",
-        spatial_dims=3,
-    )
+    synth_ds = Synthetic3DDataset(n_samples=precond_samples, patch_size=patch_size)
     synth_loader = DataLoader(synth_ds, batch_size=batch_size, shuffle=True, num_workers=0)
     num_steps = min(len(synth_loader), precond_samples // batch_size)
 
@@ -303,10 +321,8 @@ def estimate_preconditioner(preconditioner, model, loss_fn, device,
 
 
 def refresh_preconditioner(preconditioner, model, loss_fn, device,
-                           patch_size, precond_samples=500, batch_size=4):
+                           patch_size, precond_samples=500, batch_size=2):
     """Re-estimate preconditioner from synthetic data using current model weights."""
-    from src.data.synthetic import SyntheticSegmentationDataset
-
     is_gsm = hasattr(model, '_module')
     needs_gsm = isinstance(preconditioner, AdaDPSPreconditioner)
 
@@ -315,14 +331,7 @@ def refresh_preconditioner(preconditioner, model, loss_fn, device,
     else:
         est_model = model._module if is_gsm else model
 
-    synth_ds = SyntheticSegmentationDataset(
-        n_samples=precond_samples,
-        image_size=patch_size,
-        in_channels=1,
-        noise_type="pink",
-        mask_strategy="gaussian_blobs",
-        spatial_dims=3,
-    )
+    synth_ds = Synthetic3DDataset(n_samples=precond_samples, patch_size=patch_size)
     synth_loader = DataLoader(synth_ds, batch_size=batch_size, shuffle=True, num_workers=0)
     num_steps = min(len(synth_loader), precond_samples // batch_size)
 
