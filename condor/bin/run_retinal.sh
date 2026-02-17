@@ -42,6 +42,7 @@ CMD="python3 ${PROJECT_DIR}/scripts/train_fundus.py \
     --subset_fraction ${SUBSET_FRACTION} \
     --data_root ${DATA_ROOT} \
     --output_dir ${PROJECT_DIR}/outputs \
+    --val_every 10 \
     --device cuda"
 
 # Add epsilon for DP methods
