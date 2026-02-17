@@ -78,6 +78,8 @@ def parse_args():
     parser.add_argument("--data_root", type=str, default="./data/archive-2")
     parser.add_argument("--subset_fraction", type=float, default=1.0,
                         help="Fraction of training data to use (0-1)")
+    parser.add_argument("--val_every", type=int, default=0,
+                        help="Validate every N epochs (0=every epoch)")
 
     # Output
     parser.add_argument("--output_dir", type=str, default="./outputs")
@@ -234,7 +236,25 @@ def main():
                            args.epochs, args.device, preconditioner=precond,
                            scheduler=scheduler)
 
-    history = trainer.fit()
+    # Training loop with optional sparse validation
+    if args.val_every > 0:
+        history = {"train_loss": [], "val_loss": [], "val_dice": []}
+        for epoch in range(args.epochs):
+            print(f"\nEpoch {epoch + 1}/{args.epochs}")
+            train_metrics = trainer.train_epoch()
+            history["train_loss"].append(train_metrics["train_loss"])
+            print(f"  Train Loss: {train_metrics['train_loss']:.4f}")
+
+            if (epoch + 1) % args.val_every == 0 or (epoch + 1) == args.epochs:
+                val_metrics = trainer.validate()
+                history["val_loss"].append(val_metrics["val_loss"])
+                history["val_dice"].append(val_metrics["val_dice"])
+                print(f"  Val Loss: {val_metrics['val_loss']:.4f}, Val Dice: {val_metrics['val_dice']:.4f}")
+
+            if trainer.scheduler is not None:
+                trainer.scheduler.step()
+    else:
+        history = trainer.fit()
 
     # Save history
     with open(output_dir / "history.json", "w") as f:
@@ -249,10 +269,12 @@ def main():
         "lr": args.lr,
         "epochs": args.epochs,
         "seed": args.seed,
+        "subset_fraction": args.subset_fraction,
+        "n_train": len(train_dataset),
         "best_val_dice": max(history["val_dice"]),
         "final_val_dice": history["val_dice"][-1],
         "final_train_loss": history["train_loss"][-1],
-        "final_val_loss": history["val_loss"][-1],
+        "final_val_loss": history["val_loss"][-1] if history["val_loss"] else None,
     }
 
     print(f"\nResults:")
