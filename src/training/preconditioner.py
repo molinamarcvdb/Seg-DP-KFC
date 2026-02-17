@@ -267,7 +267,8 @@ class AdaDPSPreconditioner:
             dataset,
             batch_size=batch_size,
             shuffle=True,
-            num_workers=0,
+            num_workers=4,
+            persistent_workers=True,
         )
 
         # Use existing method
@@ -546,7 +547,8 @@ class MomentumPreconditioner:
             dataset,
             batch_size=batch_size,
             shuffle=True,
-            num_workers=0,
+            num_workers=4,
+            persistent_workers=True,
         )
 
         num_steps = min(len(data_loader), num_samples // batch_size)
@@ -876,7 +878,7 @@ class KFACPreconditioner:
                 num_classes=num_classes, noise_type=noise_type, mask_strategy=mask_strategy,
             )
 
-        data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+        data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, persistent_workers=True)
         num_steps = min(len(data_loader), num_samples // batch_size)
         self.estimate_from_loader(
             model=model, data_loader=data_loader, loss_fn=loss_fn,
@@ -1162,7 +1164,7 @@ class ShampooPreconditioner:
                 num_classes=num_classes, noise_type=noise_type, mask_strategy=mask_strategy,
             )
 
-        data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+        data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4, persistent_workers=True)
         num_steps = min(len(data_loader), num_samples // batch_size)
         self.estimate_from_loader(
             model=model, data_loader=data_loader, loss_fn=loss_fn,
