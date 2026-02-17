@@ -468,7 +468,22 @@ def main():
                            args.epochs, args.device, preconditioner=precond,
                            scheduler=scheduler)
 
-    history = trainer.fit()
+    # Save best model via callbacks
+    _best_dice = [0.0]
+    _last_metrics = [{}]
+
+    def _log(epoch, metrics):
+        _last_metrics[0] = metrics
+
+    def _save_best(epoch, model):
+        val_dice = _last_metrics[0].get("val_dice", 0.0)
+        if val_dice > _best_dice[0]:
+            _best_dice[0] = val_dice
+            m = model._module if hasattr(model, '_module') else model
+            torch.save(m.state_dict(), output_dir / "model_best.pt")
+            print(f"  Saved best model (dice={val_dice:.4f})")
+
+    history = trainer.fit(log_fn=_log, save_fn=_save_best)
 
     # Save history
     with open(output_dir / "history.json", "w") as f:
