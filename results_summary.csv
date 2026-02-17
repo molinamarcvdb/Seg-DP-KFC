@@ -1,0 +1,9 @@
+Method,Epsilon,Mean_Dice,Std_Dice,N_Seeds,Seeds
+dp_synthetic,1.0,0.6343,0.0183,3,"42,123,456"
+dp_synthetic,2.0,0.6670,0.0190,3,"42,123,456"
+dp_synthetic,4.0,0.6702,0.0000,1,42
+baseline,8.0,0.5433,0.0000,1,123
+dp_public,8.0,0.7347,0.0113,2,"123,456"
+dp_shampoo,8.0,0.7452,0.0252,3,"42,123,456"
+dp_shampoo_synth,8.0,0.7448,0.0175,3,"42,123,456"
+dp_synthetic,8.0,0.7433,0.0000,1,456

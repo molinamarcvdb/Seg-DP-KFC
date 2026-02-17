@@ -47,6 +47,21 @@ from src.training import (
 )
 
 
+# Global helper for multiprocessing (must be at module level to be picklable)
+def _load_volume_for_cache(args_tuple):
+    """Load a single volume for parallel caching (module-level function for pickling)."""
+    case_path, use_npz, target = args_tuple
+    from src.data.brats_dataset import _load_volume_npz, _load_volume, _binarize_target
+    
+    if use_npz:
+        image, seg = _load_volume_npz(case_path)
+    else:
+        image, seg = _load_volume(case_path)
+    
+    mask = _binarize_target(seg, target)
+    return str(case_path), (image, mask, None)
+
+
 def sliding_window_inference(model, volume, patch_size, device, out_channels=1, batch_size=4):
     """
     Sliding window inference on a full 3D volume.
@@ -232,6 +247,10 @@ def parse_args():
 
     # Performance
     parser.add_argument("--num_workers", type=int, default=4)
+    parser.add_argument("--cache_volumes", type=int, default=8,
+                        help="Number of volumes to cache in RAM per dataset")
+    parser.add_argument("--cache_all", action="store_true",
+                        help="Preload ALL volumes into RAM for maximum speed")
     parser.add_argument("--subset_fraction", type=float, default=1.0,
                         help="Use only this fraction of the dataset (0-1)")
 
@@ -270,15 +289,23 @@ def main():
 
     # Data
     print("\nLoading BraTS 2025...")
+    
+    # Determine cache size
+    if args.cache_all:
+        print("⚡ CACHE_ALL enabled: Preloading ALL volumes into RAM for maximum speed")
+        cache_size = 10000  # Effectively unlimited
+    else:
+        cache_size = args.cache_volumes
+    
     train_dataset = BraTSPatchDataset(
         root=args.data_root, split="train", patch_size=args.patch_size,
         patches_per_volume=args.patches_per_volume, target=args.target, augment=True,
-        seed=args.seed,
+        seed=args.seed, cache_volumes=cache_size,
     )
     val_dataset = BraTSPatchDataset(
         root=args.data_root, split="val", patch_size=args.patch_size,
         patches_per_volume=args.patches_per_volume, target=args.target, augment=False,
-        seed=args.seed,
+        seed=args.seed, cache_volumes=cache_size,
     )
 
     # Subset if requested
@@ -287,8 +314,43 @@ def main():
         n_val = max(1, int(len(val_dataset.cases) * args.subset_fraction))
         train_dataset.cases = train_dataset.cases[:n_train]
         val_dataset.cases = val_dataset.cases[:n_val]
-
-    nw = args.num_workers
+    
+    # Prefetch all volumes into cache if cache_all enabled
+    if args.cache_all:
+        from tqdm import tqdm
+        import time
+        
+        # Simple sequential loading with tqdm (most reliable)
+        # npz files are already preprocessed, so this is reasonably fast
+        print(f"\n⚡ Prefetching {len(train_dataset.cases)} training volumes into RAM...")
+        start_time = time.time()
+        
+        for case in tqdm(train_dataset.cases, desc="Loading train volumes", unit="vol", ncols=100):
+            train_dataset._get_volume(case)
+        
+        train_time = time.time() - start_time
+        train_rate = len(train_dataset.cases) / train_time if train_time > 0 else 0
+        print(f"✓ Training cache: {len(train_dataset._cache)} volumes in RAM ({train_time:.1f}s, {train_rate:.1f} vol/s)")
+        
+        print(f"\n⚡ Prefetching {len(val_dataset.cases)} validation volumes into RAM...")
+        start_time = time.time()
+        
+        for case in tqdm(val_dataset.cases, desc="Loading val volumes", unit="vol", ncols=100):
+            val_dataset._get_volume(case)
+        
+        val_time = time.time() - start_time
+        val_rate = len(val_dataset.cases) / val_time if val_time > 0 else 0
+        print(f"✓ Validation cache: {len(val_dataset._cache)} volumes in RAM ({val_time:.1f}s, {val_rate:.1f} vol/s)")
+        
+        total_vols = len(train_dataset._cache) + len(val_dataset._cache)
+        total_time = train_time + val_time
+        print(f"✓ Total: {total_vols} volumes cached in {total_time:.1f}s ({total_vols/total_time:.1f} vol/s)\n")
+        
+        # Set num_workers to 0 since all data is in RAM
+        nw = 0
+        print("⚡ DataLoader num_workers=0 (all data in RAM, zero I/O overhead)")
+    else:
+        nw = args.num_workers
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True,
                               num_workers=nw, pin_memory=True, persistent_workers=nw > 0)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False,
