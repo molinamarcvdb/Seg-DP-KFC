@@ -24,6 +24,7 @@ dependencies = [
     "einops>=0.7.0", # Tensor reshaping (RADIO dependency)
     "nibabel>=5.3.3",
     "plotly>=6.5.2",
+    "gdown>=5.2.1",
 ]
 
 [project.optional-dependencies]
