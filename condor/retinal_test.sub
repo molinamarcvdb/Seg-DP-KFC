@@ -1,0 +1,17 @@
+executable = /afs/cern.ch/work/m/mmolinav/public/SEG_DP_KFC/condor/bin/run_retinal.sh
+arguments = $(method) $(epsilon) $(seed) $(subset_fraction)
+
+output = /afs/cern.ch/work/m/mmolinav/public/SEG_DP_KFC/condor/output/retinal_test_$(method)_f$(subset_fraction).$(ClusterId).$(ProcId).out
+error  = /afs/cern.ch/work/m/mmolinav/public/SEG_DP_KFC/condor/error/retinal_test_$(method)_f$(subset_fraction).$(ClusterId).$(ProcId).err
+log    = /afs/cern.ch/work/m/mmolinav/public/SEG_DP_KFC/condor/log/retinal_test.$(ClusterId).log
+
+should_transfer_files = YES
+
+MY.SendCredential = True
+
+request_gpus = 1
+request_cpus = 2
+request_memory = 20GB
++JobFlavour = "microcentury"
+
+queue method, epsilon, seed, subset_fraction from /afs/cern.ch/work/m/mmolinav/public/SEG_DP_KFC/condor/retinal_test_jobs.txt

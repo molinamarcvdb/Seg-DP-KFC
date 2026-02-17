@@ -76,6 +76,8 @@ def parse_args():
 
     # Data
     parser.add_argument("--data_root", type=str, default="./data/archive-2")
+    parser.add_argument("--subset_fraction", type=float, default=1.0,
+                        help="Fraction of training data to use (0-1)")
 
     # Output
     parser.add_argument("--output_dir", type=str, default="./outputs")
@@ -98,7 +100,9 @@ def main():
     exp_name = f"fundus_{args.method}"
     if args.method != "baseline":
         exp_name += f"_eps{args.epsilon}"
-    output_dir = Path(args.output_dir) / f"{exp_name}_{timestamp}"
+    if args.subset_fraction < 1.0:
+        exp_name += f"_f{args.subset_fraction}"
+    output_dir = Path(args.output_dir) / f"{exp_name}_s{args.seed}_{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Save config
@@ -118,6 +122,12 @@ def main():
         root=args.data_root, split="val", image_size=args.image_size,
         augment=False, seed=args.seed,
     )
+    # Subset training data if requested (val stays full for fair comparison)
+    if args.subset_fraction < 1.0:
+        n_train = max(1, int(len(train_dataset.pairs) * args.subset_fraction))
+        train_dataset.pairs = train_dataset.pairs[:n_train]
+        print(f"  Using {args.subset_fraction:.0%} of training data: {n_train} samples")
+
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
     print(f"  Train: {len(train_dataset)}, Val: {len(val_dataset)}")

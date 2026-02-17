@@ -1,0 +1,2 @@
+baseline 8.0 42 0.1
+dp_shampoo_synth 8.0 42 0.1

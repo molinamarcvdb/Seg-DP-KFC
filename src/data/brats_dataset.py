@@ -151,15 +151,25 @@ class BraTSPatchDataset(Dataset):
         self._cache_max = cache_volumes
         
         # Check for preprocessed .npz files (10-20x faster)
-        npz_cases = _discover_npz_cases(preprocessed_root) if use_preprocessed else []
+        # First check if root itself contains .npz files (local preprocessed)
+        npz_in_root = _discover_npz_cases(root) if use_preprocessed else []
+        if npz_in_root:
+            npz_cases = npz_in_root
+            print(f"Using preprocessed .npz files from {root} (10-20x faster)")
+        elif use_preprocessed:
+            npz_cases = _discover_npz_cases(preprocessed_root)
+            if npz_cases:
+                print(f"Using preprocessed .npz files from {preprocessed_root} (10-20x faster)")
+        else:
+            npz_cases = []
+
         self.use_npz = len(npz_cases) > 0
-        
+
         if self.use_npz:
-            print(f"Using preprocessed .npz files from {preprocessed_root} (10-20x faster)")
             all_cases = npz_cases
         else:
             if use_preprocessed:
-                print(f"Preprocessed files not found at {preprocessed_root}, falling back to NIfTI")
+                print(f"Preprocessed files not found, falling back to NIfTI")
                 print("Run: python scripts/preprocess_brats.py  for 10-20x faster loading")
             all_cases = _discover_cases(root)
 

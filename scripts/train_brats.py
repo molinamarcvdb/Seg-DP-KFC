@@ -260,6 +260,8 @@ def parse_args():
     parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--eval_volumes", type=int, default=None,
                         help="Number of validation volumes for sliding window eval (None=all)")
+    parser.add_argument("--skip_volume_eval", action="store_true",
+                        help="Skip sliding window full volume evaluation")
 
     return parser.parse_args()
 
@@ -489,24 +491,27 @@ def main():
     }
 
     # Sliding window inference on full validation volumes
-    print("\nSliding window inference on validation volumes...")
-    model_for_eval = trainer.model
-    if hasattr(model_for_eval, '_module'):
-        model_for_eval = model_for_eval._module
-    model_for_eval.eval()
-    vol_results = evaluate_full_volumes(
-        model_for_eval, val_dataset, args.patch_size, args.device,
-        out_channels=out_channels, channel_names=channel_names,
-        n_volumes=args.eval_volumes,
-    )
-    results["full_volume_dice"] = vol_results["mean_dice"]
-    results["full_volume_dice_per_channel"] = {
-        k: v for k, v in vol_results.items() if k != "mean_dice"
-    }
-
-    print(f"\nResults:")
-    print(f"  Best Val Dice (patches): {results['best_val_dice']:.4f}")
-    print(f"  Full Volume Dice: {results['full_volume_dice']:.4f}")
+    if not args.skip_volume_eval:
+        print("\nSliding window inference on validation volumes...")
+        model_for_eval = trainer.model
+        if hasattr(model_for_eval, '_module'):
+            model_for_eval = model_for_eval._module
+        model_for_eval.eval()
+        vol_results = evaluate_full_volumes(
+            model_for_eval, val_dataset, args.patch_size, args.device,
+            out_channels=out_channels, channel_names=channel_names,
+            n_volumes=args.eval_volumes,
+        )
+        results["full_volume_dice"] = vol_results["mean_dice"]
+        results["full_volume_dice_per_channel"] = {
+            k: v for k, v in vol_results.items() if k != "mean_dice"
+        }
+        print(f"\nResults:")
+        print(f"  Best Val Dice (patches): {results['best_val_dice']:.4f}")
+        print(f"  Full Volume Dice: {results['full_volume_dice']:.4f}")
+    else:
+        print(f"\nResults:")
+        print(f"  Best Val Dice (patches): {results['best_val_dice']:.4f}")
 
     with open(output_dir / "results.json", "w") as f:
         json.dump(results, f, indent=2)
