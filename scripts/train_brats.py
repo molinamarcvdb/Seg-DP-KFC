@@ -279,7 +279,7 @@ def main():
     exp_name = f"brats_{args.method}"
     if args.method != "baseline":
         exp_name += f"_eps{args.epsilon}"
-    output_dir = Path(args.output_dir) / f"{exp_name}_{timestamp}"
+    output_dir = Path(args.output_dir) / f"{exp_name}_s{args.seed}_{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Save config
