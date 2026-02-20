@@ -474,13 +474,30 @@ def generate_frangi_vessels(
     return mask
 
 
+def generate_random_noise_mask(size: int, threshold: float = 0.5) -> np.ndarray:
+    """
+    Generate a mask from pure i.i.d. random noise (no spatial structure).
+
+    Each pixel is independently sampled as foreground with probability ~threshold.
+    This is the "adversarial" baseline — no spatial correlations at all.
+
+    Args:
+        size: Image size
+        threshold: Approximate foreground fraction
+
+    Returns:
+        Binary mask of shape (size, size)
+    """
+    return (np.random.rand(size, size) < threshold).astype(float)
+
+
 def get_mask_generator(strategy: str) -> Callable:
     """
     Get mask generator function by name.
 
     Args:
         strategy: One of "gaussian_blobs", "random_shapes", "pink_threshold",
-                  "voronoi", "frangi"
+                  "voronoi", "frangi", "random_noise"
 
     Returns:
         Mask generator function
@@ -491,6 +508,7 @@ def get_mask_generator(strategy: str) -> Callable:
         "pink_threshold": generate_pink_threshold,
         "voronoi": generate_voronoi_cells,
         "frangi": generate_frangi_vessels,
+        "random_noise": generate_random_noise_mask,
     }
     if strategy not in generators:
         raise ValueError(f"Unknown strategy: {strategy}. Available: {list(generators.keys())}")

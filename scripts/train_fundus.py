@@ -68,7 +68,7 @@ def parse_args():
                         choices=["random", "blob", "perlin"])
     parser.add_argument("--mask_strategy", type=str, default="frangi",
                         choices=["gaussian_blobs", "random_shapes", "pink_threshold",
-                                 "voronoi", "frangi"])
+                                 "voronoi", "frangi", "random_noise"])
 
     # Model
     parser.add_argument("--features", type=int, nargs="+", default=[32, 64, 128])

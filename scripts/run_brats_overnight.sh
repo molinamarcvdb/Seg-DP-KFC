@@ -10,7 +10,7 @@ COMMON="--epsilon 8.0 --epochs 10 \
     --patch_size 64 --batch_size 16"
 
 for SEED in 42 123 456; do
-  for METHOD in baseline dp dp_synthetic dp_public dp_shampoo dp_shampoo_synth; do
+  for METHOD in dp dp_synthetic dp_public dp_shampoo dp_shampoo_synth; do
     echo ""
     echo "============================================"
     echo "=== method=$METHOD seed=$SEED ==="
